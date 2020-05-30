@@ -1,0 +1,11 @@
+#!/bin/sh
+module="chris"
+device="chris"
+
+# invoke rmmod with all arguments we got
+/sbin/rmmod chris.ko $* || exit 1
+
+# remove nodes
+rm -f /dev/${device}[0-7] 
+
+exit 0
