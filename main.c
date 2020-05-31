@@ -21,6 +21,13 @@ static int __init chris_init(void)
     RETURN_VAL_DO_INFO_IF_FAIL(cdesc, -ENOMEM,
         CHRIS_LOG(KLOG_DEBUG, "cdesc kzalloc failed!\n"););
 
+	//init host
+	ret = edma_host_init(&cdesc->host);
+	RETURN_VAL_DO_INFO_IF_FAIL(!ret, ret, 
+        	CHRIS_LOG(KLOG_DEBUG, "edma_host_init failed! ret = %d\n", ret););
+
+		
+	// init char device 
     chris_dev = dev_init();
     DO_INFO_IF_EXPR_IS_ERR(chris_dev,
         CHRIS_LOG(KLOG_DEBUG, "dev_init failed!\n"); ret = PTR_ERR(chris_dev); goto fail;);
@@ -45,6 +52,9 @@ static int __exit chris_exit(void)
        gcdesc->chris_dev = NULL;
        dev_cleanup(chris_dev);
     }   
+
+	//cleanup host
+	edma_host_cleanup(&gcdesc->host);
 
 	CHRIS_LOG(KLOG_DEBUG, "chris_exit\n");
 
