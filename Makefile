@@ -1,5 +1,5 @@
 obj-m := chris.o
-chris-objs := main.o dev.o
+chris-objs := main.o dev.o edma_host.o
 
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 

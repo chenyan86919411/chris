@@ -2,16 +2,21 @@
 #include "chris.h"
 #include "dev.h"
 
+int chris_major = 0;
+int chris_minor = 0;
+
 
 int chris_open(struct inode *inode, struct file *filp)
 {
     struct chris_priv_data_s *priv_data = NULL;
-	//struct chris_dev_s *chris_dev = container_of(inode->i_cdev, struct chris_dev_s, cdev);
+	struct chris_dev_s *chris_dev = container_of(inode->i_cdev, struct chris_dev_s, cdev);
 
+	priv_data->chris_dev = chris_dev;
+	
 	CHRIS_LOG(KLOG_DEBUG, "\n");
 
     priv_data = kzalloc(sizeof(struct chris_priv_data_s), GFP_KERNEL);
-    RETURN_VAL_DO_INFO_IF_FAIL(priv_data, -ENOMEM,
+    RETURN_VAL_DO_INFO_IF_IS_ERR(priv_data, -ENOMEM,
         CHRIS_LOG(KLOG_DEBUG, "priv_data kzalloc failed!\n"););
     
 	filp->private_data = priv_data;
@@ -34,11 +39,85 @@ int chris_release(struct inode *inode, struct file *filp)
     return 0;
 }
 
+static ssize_t chris_read(struct file *filp, char __user *buf, size_t count, loff_t *ppos)
+{
+    struct chris_priv_data_s *priv_data = (struct chris_priv_data_s *)filp->private_data;
+
+	priv_data = priv_data;
+    
+    return 0;
+}
+
+static ssize_t chris_write(struct file *filp, const char __user *data, size_t len, loff_t *ppos)
+{
+    struct chris_priv_data_s *priv_data = (struct chris_priv_data_s *)filp->private_data;
+
+	priv_data = priv_data;
+
+    return len;
+}
+
+
+static int chris_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+    struct chris_priv_data_s *priv_data = (struct chris_priv_data_s *)filp->private_data;
+
+	priv_data = priv_data;
+
+
+    return 0;
+}
+
+
+static int chris_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+    struct chris_priv_data_s *priv_data = (struct chris_priv_data_s *)filp->private_data;
+
+	priv_data = priv_data;
+
+ 
+    return 0;
+}
+
+
+static unsigned int chris_poll(struct file * filp, poll_table *wait) 
+{
+    struct chris_priv_data_s *priv_data = filp->private_data;
+	struct chris_dev_s *chris_dev = priv_data->chris_dev;
+	unsigned int mask = 0;
+
+	poll_wait(filp, &chris_dev->wait, wait);
+    //if (list->head != list->tail)
+    //{
+    //    mask |= POLLIN | POLLRDNORM;
+    //}
+
+    return 0;
+}
+
+static int chris_fasync(int fd, struct file *filp, int mode)
+{
+    struct chris_priv_data_s *priv_data = filp->private_data;
+	struct chris_dev_s *chris_dev = priv_data->chris_dev;
+
+	priv_data = priv_data;
+
+    return fasync_helper(fd, filp, mode, &chris_dev->async_queue);
+}
+
+
 
 struct file_operations chris_fops = {
-	.owner =		THIS_MODULE,
-	.open =		chris_open,
-	.release =	chris_release,
+	.owner = THIS_MODULE,
+	.open = chris_open,
+	.release = chris_release,
+	.read = chris_read,
+    .write = chris_write,
+    .unlocked_ioctl = chris_ioctl,
+    .compat_ioctl = chris_ioctl,
+    .poll = chris_poll,
+    .fasync = chris_fasync,
+    .mmap = chris_mmap,
 };
 
 
@@ -46,11 +125,9 @@ static int chris_setup_cdev(struct chris_dev_s *dev, int major, int index)
 {
     int ret, devno = MKDEV(major, index);
 
-	CHRIS_LOG(KLOG_DEBUG, "major = %d\n", major);
-
     cdev_init(&dev->cdev, &chris_fops);    
 
-    dev->cdev.owner = THIS_MODULE;        
+    dev->cdev.owner = THIS_MODULE;
     dev->cdev.ops = &chris_fops;
 
     ret = cdev_add(&dev->cdev, devno, 1);
@@ -68,11 +145,22 @@ struct chris_dev_s *dev_init(void)
     dev_t devno = 0;
     struct chris_dev_s *chris_dev = NULL;
 
-    ret = alloc_chrdev_region(&devno, 0, CHRIS_DEVICE_NUM, "chris");
-    RETURN_VAL_DO_INFO_IF_FAIL(!ret, ERR_PTR(ret), 
-        CHRIS_LOG(KLOG_DEBUG, "alloc_chrdev_region failed! ret = %d\n", ret););
-
-	CHRIS_LOG(KLOG_DEBUG, "devno = 0x%x\n", devno);
+	if (chris_major) 
+    {     
+        devno = MKDEV(chris_major, chris_minor); 
+        ret = register_chrdev_region(devno, CHRIS_DEVICE_NUM, "chris");
+		RETURN_VAL_DO_INFO_IF_FAIL(!ret, ERR_PTR(ret), 
+        	CHRIS_LOG(KLOG_DEBUG, "alloc_chrdev_region failed! ret = %d\n", ret););
+    } 
+    else 
+    {        
+        ret = alloc_chrdev_region(&devno, chris_minor, CHRIS_DEVICE_NUM, "chris");
+		RETURN_VAL_DO_INFO_IF_FAIL(!ret, ERR_PTR(ret), 
+        	CHRIS_LOG(KLOG_DEBUG, "alloc_chrdev_region failed! ret = %d\n", ret););
+		
+        CHRIS_LOG(KLOG_DEBUG, "major = %d\n", MAJOR(devno));
+        chris_major = MAJOR(devno);
+    }	
 
     chris_dev = kzalloc(sizeof(struct chris_dev_s) * CHRIS_DEVICE_NUM, GFP_KERNEL);
     DO_INFO_IF_EXPR_IS_ERR(chris_dev, 
@@ -84,6 +172,8 @@ struct chris_dev_s *dev_init(void)
         DO_INFO_IF_EXPR_UNLIKELY(!ret,
             CHRIS_LOG(KLOG_DEBUG, "chris_setup_cdev failed! \n"); goto fail);
     }
+
+	init_waitqueue_head(&(chris_dev->wait));
 
     return chris_dev;
     

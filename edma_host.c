@@ -1,14 +1,18 @@
 #include <linux/errno.h>
 #include <linux/kthread.h>
 #include <linux/proc_fs.h>
-#include <linux/seg_file.h>
-#include "bma_pci.h"
+//#include <linux/seg_file.h>
+
+#include "chris.h"
 #include "edma_host.h"
+
+#define SEND2RECV
+#define EDMA_TIMER
 
 static struct edma_user_inft_s *g_user_func[TYPE_MAX] = {};
 static struct proc_dir_entry *edma_proc_dir = NULL;
-static struct bma_dev_s *g_bma_dev = NULL;
-
+//static struct bma_dev_s *g_bma_dev = NULL;
+/*
 static int edma_host_dma_interrupt(struct edma_host_s *edma_host);
 
 static int userinfo_proc_show(struct seg_file *seg, void *v)
@@ -255,9 +259,9 @@ int edma_host_dma_start(struct edma_host_s *edma_host, struct bma_priv_data_s *p
     return 0;
 }
 
-
+*/
 static int edma_host_send_msg(struct edma_host_s *edma_host)
-{
+{/*
     struct edma_mbx_hdr_s *send_mbx_hdr = NULL;
     static unsigned int timer_cnt = 0;
 
@@ -300,7 +304,7 @@ static int edma_host_send_msg(struct edma_host_s *edma_host)
         tasklet_hi_schedule(&edma_host->tasklet);
 #endif        
         return -EAGAIN; //保证定时器再进一次，其实没必要
-    }
+    }*/
     return 0;
 }
 
@@ -312,11 +316,13 @@ static int edma_host_timeout(unsigned long data)
     int ret = 0;
     struct edma_host_s *edma_host = (struct edma_host_s *)data;
 
+	CHRIS_LOG(KLOG_DEBUG, "edma_host_timeout\n");
+
     ret = edma_host_send_msg(edma_host);
     DO_INFO_IF_EXPR_LIKELY(ret < 0,
-        mod_timer(&edma_host->timer, jiffies_64 + TIIMER_INTERVAL_CHECK));
+        mod_timer(&edma_host->timer, jiffies_64 + TIMER_INTERVAL_CHECK));
 }
-
+/*
 static int edma_host_dma_timeout(unsigned long data)
 {
     int ret = 0;
@@ -324,27 +330,32 @@ static int edma_host_dma_timeout(unsigned long data)
 
     ret = edma_host_dma_interrupt(edma_host);
     DO_INFO_IF_EXPR_LIKELY(ret < 0,
-        mod_timer(&edma_host->dmatimer, jiffies_64 + DMA_TIIMER_INTERVAL_CHECK));
-}
+        mod_timer(&edma_host->dmatimer, jiffies_64 + DMA_TIMER_INTERVAL_CHECK));
+}*/
 #else
 static int edma_host_thread(void *arg)
 {
     int timeout = 0;
     struct edma_host_s *edma_host = (struct edma_host_s *)arg;
 
+	CHRIS_LOG(KLOG_DEBUG, "edma_host_thread start!\n");
+
     while(!kthread_should_stop()) {
-        //不用timeout函数
-        timeout = wait_for_completion_interruptible(&edma_host->msg_ready);
+		CHRIS_LOG(KLOG_DEBUG, "edma_host_thread 1\n");
+        //timeout = wait_for_completion_interruptible(&edma_host->msg_ready);
+        timeout = wait_for_completion_interruptible_timeout(&edma_host->msg_ready, 10000);
+        
+		CHRIS_LOG(KLOG_DEBUG, "edma_host_thread, timeout = %d\n", timeout);
 
         (void)edma_host_send_msg(edma_host);
 
-        (void)edma_host_dma_interrupt(edma_host);
+        //(void)edma_host_dma_interrupt(edma_host);
     }
 
     return 0;
 }
 #endif
-
+/*
 int edma_host_copy_msg(struct edma_host_s *edma_host, void *msg, size_t msg_len)
 {
     int ret = 0;
@@ -486,9 +497,9 @@ static int edma_host_msg_process(struct edma_host_s *edma_host, struct edma_msg_
 {
     return -1;
 }
-
+*/
 void edma_host_isr_tasklet(unsigned long data)
-{
+{/*
     int result = 0;
     U16 len = 0;
     U16 off = 0;
@@ -542,22 +553,24 @@ void edma_host_isr_tasklet(unsigned long data)
             recv_mbx_hdr->mbxlen = 0;
             break;
         }  
-    }
+    }*/
 }
-
+/*
 static int edma_host_dma_interrupt(struct edma_host_s *edma_host)
 {
     return -EAGAIN;
-}
+}*/
 
 irqreturn_t edma_host_irq_handle(struct edma_host_s *edma_host)
 {
-    edma_host_interrupt(edma_host);
+    //edma_host_interrupt(edma_host);
 
     tasklet_hi_schedule(&edma_host->tasklet);
 
     return IRQ_HANDLED;
 }
+
+/*
 
 static int edma_host_malloc_dma_buf(struct bma_dev_s *bma_dev)
 {
@@ -646,24 +659,24 @@ int edma_host_user_unregister(U32 type)
     g_user_func[type] = NULL;
     return 0;
 }
-
+*/
 int edma_host_init(struct edma_host_s *edma_host)
 {
     int ret = 0;
-    struct bma_dev_s *bma_dev = NULL;
+    struct chris_descriptor_s *desc = NULL;
 
-    bma_dev = container_of(edma_host, struct bma_dev_s, edma_host);
-    g_bma_dev = bma_dev;
+    desc = container_of(edma_host, struct chris_descriptor_s, host);
+    //g_bma_dev = bma_dev;
 
-    ret = edma_host_proc_init(bma_dev);
-    RETURN_VAL_DO_INFO_IF_FAIL(!ret, ret,
-        CHRIS_LOG(KLOG_ERROR, "edma_proc_init failed! \n"););
+    //ret = edma_host_proc_init(bma_dev);
+    //RETURN_VAL_DO_INFO_IF_FAIL(!ret, ret,
+    //    CHRIS_LOG(KLOG_ERROR, "edma_proc_init failed! \n"););
 
 #ifdef EDMA_TIMER
     setup_timer(&edma_host->timer, edma_host_timeout, (unsigned long)edma_host);
-    mod_timer(edma_host->timer, jiffies_64 + TIMER_INTERVAL_CHECK);
-    setup_timer(&edma_host->dmatimer, edma_host_dma_timeout, (unsigned long)edma_host);
-    mod_timer(&edma_host->dmatimer, jiffies_64 + DMA_TIMER_INTERVAL_CHECK);
+    mod_timer(&edma_host->timer, jiffies_64 + TIMER_INTERVAL_CHECK);
+    //setup_timer(&edma_host->dmatimer, edma_host_dma_timeout, (unsigned long)edma_host);
+    //mod_timer(&edma_host->dmatimer, jiffies_64 + DMA_TIMER_INTERVAL_CHECK);
 #else
     init_completion(&edma_host->msg_ready);
     edma_host->edma_thread = kthread_run(edma_host_thread, (void *)edma_host, "edma_host");
@@ -681,9 +694,9 @@ int edma_host_init(struct edma_host_s *edma_host)
 
     tasklet_init(&edma_host->tasklet, edma_host_isr_tasklet, (unsigned long)edma_host);
 
-    edma_host->edma_flag = bma_dev->bma_pci_dev->edma_swap_addr;
-    edma_host->edma_send_addr = bma_dev->bma_pci_dev->edma_swap_addr + HOST_DMA_FLAG_LEN;
-    memset(edma_host->edma_send_addr, 0, SIZEOF_MBX_HDR);
+    //edma_host->edma_flag = bma_dev->bma_pci_dev->edma_swap_addr;
+    //edma_host->edma_send_addr = bma_dev->bma_pci_dev->edma_swap_addr + HOST_DMA_FLAG_LEN;
+    //memset(edma_host->edma_send_addr, 0, SIZEOF_MBX_HDR);
 
 #ifdef SEND2RECV
     edma_host->edma_recv_addr = edma_host->edma_send_addr;
@@ -691,16 +704,16 @@ int edma_host_init(struct edma_host_s *edma_host)
     edma_host->edma_recv_addr = edma_host->edma_send_addr + HOST_MAX_SEND_MBX_LEN;
 #endif
 
-    (void)edma_host_malloc_dma_buf(bma_dev);
+    //(void)edma_host_malloc_dma_buf(bma_dev);
 
-    init_waitqueue_head(&edma_host->wq_dmah2b);
-    init_waitqueue_head(&edma_host->wq_dmab2h);
+    //init_waitqueue_head(&edma_host->wq_dmah2b);
+    //init_waitqueue_head(&edma_host->wq_dmab2h);
 
     
-    spin_lock_init(&edma_host->reg_lock);
+    //spin_lock_init(&edma_host->reg_lock);
 
-    edma_host->h2bstate = H2BSTATE_IDIE;
-    edma_host->b2hstate = B2HSTATE_IDIE;
+    //edma_host->h2bstate = H2BSTATE_IDIE;
+    //edma_host->b2hstate = B2HSTATE_IDIE;
 
     return 0;
 }
@@ -708,7 +721,7 @@ int edma_host_init(struct edma_host_s *edma_host)
 
 void edma_host_cleanup(struct edma_host_s *edma_host)
 {
-    struct bma_dev_s *bma_dev = container_of(edma_host, struct bma_dev_s, edma_host);
+    struct chris_descriptor_s *desc = container_of(edma_host, struct chris_descriptor_s, host);
 
     tasklet_kill(&edma_host->tasklet);
     if(edma_host->msg_send_buf) {
@@ -718,13 +731,13 @@ void edma_host_cleanup(struct edma_host_s *edma_host)
 
 #ifdef EDMA_TIMER
     del_timer(&edma_host->timer);
-    del_timer(&edma_host->dmatimer);
+    //del_timer(&edma_host->dmatimer);
 #else
-    completion(&edma_host->msg_ready);      //唤醒内核线程
-    kthread_stop(edma_host->edma_thread);   //阻塞直至内核线程退出     
+    complete(&edma_host->msg_ready); 
+    kthread_stop(edma_host->edma_thread);  
 #endif 
     
-    edma_host_free_dma_buf(bma_dev);
-    edma_host_proc_exit(bma_dev);
+    //edma_host_free_dma_buf(bma_dev);
+    //edma_host_proc_exit(bma_dev);
 }
 

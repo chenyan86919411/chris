@@ -3,6 +3,7 @@
 #define _CHRIS_H
 
 #include <linux/slab.h>
+#include "edma_host.h"
 
 
 #define CHRIS_DEVICE_NUM 2
@@ -68,6 +69,7 @@ extern int debug_level;
 
 
 struct chris_descriptor_s {
+	struct edma_host_s host;
     struct chris_dev_s *chris_dev;
 };
 
